@@ -6,14 +6,16 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+// ✅ Rută de test pentru Railway
 app.get('/', (req, res) => {
+  console.log('🌐 GET / primit de la Railway');
   res.send('✅ Server Quizzy este online!');
 });
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: "*", // Poți înlocui cu domeniul aplicației mobile în producție
     methods: ["GET", "POST"]
   }
 });
@@ -77,7 +79,8 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT;
+// ✅ Railway oferă PORT ca variabilă de mediu
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Serverul rulează pe portul ${PORT}`);
 });
