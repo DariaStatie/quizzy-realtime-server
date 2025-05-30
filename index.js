@@ -6,15 +6,15 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
-// ✅ Rută de test pentru Railway
+// ✅ Rută principală de verificare Railway
 app.get('/', (req, res) => {
-  res.send('✅ Server Socket IO este online');
+  res.send('✅ Server Quizzy funcționează!');
 });
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // Poți seta aici domeniul aplicației mobile pentru securitate
+    origin: "*", // Poți restrânge la domeniul aplicației tale
     methods: ["GET", "POST"]
   }
 });
@@ -59,9 +59,7 @@ io.on('connection', (socket) => {
     if (rooms[roomId].scores.length === 2) {
       const [player1, player2] = rooms[roomId].scores;
       io.to(roomId).emit('receive_scores', { player1, player2 });
-
-      // Șterge camera după finalizare
-      delete rooms[roomId];
+      delete rooms[roomId]; // Curăță după final
     }
   });
 
@@ -84,9 +82,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.get("/", (req, res) => {
-  res.send("Server Quizzy funcționează!");
-});
 server.listen(PORT, () => {
   console.log(`🚀 Serverul rulează pe portul ${PORT}`);
 });
