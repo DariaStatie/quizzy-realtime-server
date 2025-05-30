@@ -84,6 +84,9 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
+app.get("/", (req, res) => {
+  res.send("Server Quizzy funcționează!");
+});
 server.listen(PORT, () => {
   console.log(`🚀 Serverul rulează pe portul ${PORT}`);
 });
