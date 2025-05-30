@@ -15,7 +15,7 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // Poți înlocui cu domeniul aplicației mobile în producție
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
@@ -25,6 +25,7 @@ let rooms = {};
 io.on('connection', (socket) => {
   console.log('🟢 Nou client conectat:', socket.id);
 
+  // 🔗 Alăturare într-o cameră
   socket.on('join_room', (roomId) => {
     console.log(`📥 Socket ${socket.id} a intrat în camera ${roomId}`);
     socket.join(roomId);
@@ -33,6 +34,7 @@ io.on('connection', (socket) => {
       rooms[roomId] = {
         players: [],
         scores: [],
+        settings: null, // setări: subject și difficulty
       };
     }
 
@@ -42,15 +44,38 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('player_joined', rooms[roomId].players);
 
-    if (rooms[roomId].players.length === 2) {
-      io.to(roomId).emit('start_quiz');
+    if (rooms[roomId].players.length === 2 && rooms[roomId].settings) {
+      io.to(roomId).emit('start_quiz', {
+        subject: rooms[roomId].settings.subject,
+        difficulty: rooms[roomId].settings.difficulty,
+      });
     }
   });
 
+  // ✅ Setare subject și difficulty (doar de primul jucător)
+  socket.on('set_settings', ({ roomId, subject, difficulty }) => {
+    if (!rooms[roomId]) return;
+
+    if (!rooms[roomId].settings) {
+      rooms[roomId].settings = { subject, difficulty };
+      console.log(`⚙️ Setări cameră ${roomId}: ${subject}, ${difficulty}`);
+    }
+
+    // Dacă deja erau 2 jucători conectați, trimitem imediat start_quiz
+    if (rooms[roomId].players.length === 2) {
+      io.to(roomId).emit('start_quiz', {
+        subject,
+        difficulty,
+      });
+    }
+  });
+
+  // 🔁 Sincronizare răspunsuri între jucători
   socket.on('answer', ({ roomId, answer, questionIndex }) => {
     socket.to(roomId).emit('opponent_answered', { answer, questionIndex });
   });
 
+  // 📊 Scoruri la final
   socket.on('submit_score', ({ roomId, score }) => {
     console.log(`📨 Scor primit din camera ${roomId}: ${score}`);
     if (!rooms[roomId]) return;
@@ -65,6 +90,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ❌ Deconectare
   socket.on('disconnect', () => {
     console.log('🔴 Client deconectat:', socket.id);
     for (const roomId in rooms) {
@@ -79,7 +105,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ✅ Railway oferă PORT ca variabilă de mediu
+// ✅ Pornire server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Serverul rulează pe portul ${PORT}`);
