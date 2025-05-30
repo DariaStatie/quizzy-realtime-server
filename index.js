@@ -6,10 +6,15 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+// ✅ Rută de test pentru Railway
+app.get('/', (req, res) => {
+  res.send('✅ Server Socket IO este online');
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // Poți pune și domeniul aplicației tale mobile pentru securitate
+    origin: "*", // Poți seta aici domeniul aplicației mobile pentru securitate
     methods: ["GET", "POST"]
   }
 });
@@ -20,6 +25,7 @@ io.on('connection', (socket) => {
   console.log('🟢 Nou client conectat:', socket.id);
 
   socket.on('join_room', (roomId) => {
+    console.log(`📥 Socket ${socket.id} a intrat în camera ${roomId}`);
     socket.join(roomId);
 
     if (!rooms[roomId]) {
@@ -45,6 +51,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('submit_score', ({ roomId, score }) => {
+    console.log(`📨 Scor primit din camera ${roomId}: ${score}`);
     if (!rooms[roomId]) return;
 
     rooms[roomId].scores.push(score);
@@ -53,7 +60,7 @@ io.on('connection', (socket) => {
       const [player1, player2] = rooms[roomId].scores;
       io.to(roomId).emit('receive_scores', { player1, player2 });
 
-      // Curățăm camera după ce am trimis scorurile
+      // Șterge camera după finalizare
       delete rooms[roomId];
     }
   });
@@ -67,7 +74,6 @@ io.on('connection', (socket) => {
         room.players = room.players.filter(id => id !== socket.id);
         io.to(roomId).emit('player_left');
 
-        // Dacă nu mai e nimeni în cameră, o ștergem
         if (room.players.length === 0) {
           delete rooms[roomId];
         }
