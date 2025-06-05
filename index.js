@@ -43,11 +43,13 @@ io.on('connection', (socket) => {
     }
 
     const isHost = room.players[0] === socket.id;
-    if (callback) callback({
-      isCreator: isHost,
-      subject: room.settings?.subject || null,
-      difficulty: room.settings?.difficulty || null,
-    });
+    if (callback) {
+      callback({
+        isCreator: isHost,
+        subject: room.settings?.subject || null,
+        difficulty: room.settings?.difficulty || null,
+      });
+    }
 
     io.to(roomId).emit('player_joined', room.players);
 
@@ -60,11 +62,11 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 🔹 Răspuns la întrebarea "sunt eu host?"
   socket.on('who_is_host', (roomId, callback) => {
     const room = rooms[roomId];
     if (room && room.players.length > 0) {
-      const hostId = room.players[0];
-      const isHost = socket.id === hostId;
+      const isHost = room.players[0] === socket.id;
       if (callback) callback(isHost);
     } else {
       if (callback) callback(false);
@@ -86,6 +88,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 🔹 Întrebările trimise de host
   socket.on('set_questions', ({ roomId, questions }) => {
     if (rooms[roomId]) {
       rooms[roomId].questions = questions;
