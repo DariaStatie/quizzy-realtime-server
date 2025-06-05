@@ -43,14 +43,13 @@ io.on('connection', (socket) => {
 
     const isHost = room.players[0] === socket.id;
     if (callback) callback({
-	isCreator: isHost,
-  	subject: room.settings?.subject || null,
-  	difficulty: room.settings?.difficulty || null,
+      isCreator: isHost,
+      subject: room.settings?.subject || null,
+      difficulty: room.settings?.difficulty || null,
     });
 
     io.to(roomId).emit('player_joined', room.players);
 
-    // Dacă deja avem 2 și setările sunt gata, start quiz direct
     if (room.players.length === 2 && room.settings) {
       io.to(roomId).emit('start_quiz', room.settings);
     }
@@ -61,7 +60,6 @@ io.on('connection', (socket) => {
       rooms[roomId].settings = { subject, difficulty };
       console.log(`📚 Setări salvate în ${roomId}:`, subject, difficulty);
 
-      // Dacă sunt 2 jucători, trimitem semnalul să înceapă
       if (rooms[roomId].players.length === 2) {
         io.to(roomId).emit('start_quiz', rooms[roomId].settings);
       }
