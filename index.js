@@ -32,7 +32,7 @@ io.on('connection', (socket) => {
         players: [],
         scores: [],
         settings: null,
-        questions: null, // 🔹 Adăugat: întrebările vor fi salvate aici
+        questions: null,
       };
     }
 
@@ -60,6 +60,17 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('who_is_host', (roomId, callback) => {
+    const room = rooms[roomId];
+    if (room && room.players.length > 0) {
+      const hostId = room.players[0];
+      const isHost = socket.id === hostId;
+      if (callback) callback(isHost);
+    } else {
+      if (callback) callback(false);
+    }
+  });
+
   socket.on('set_quiz_settings', ({ roomId, subject, difficulty }) => {
     if (rooms[roomId]) {
       rooms[roomId].settings = { subject, difficulty };
@@ -75,7 +86,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 🔹 Adăugat: serverul primește întrebările de la host
   socket.on('set_questions', ({ roomId, questions }) => {
     if (rooms[roomId]) {
       rooms[roomId].questions = questions;
