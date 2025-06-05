@@ -32,6 +32,7 @@ io.on('connection', (socket) => {
         players: [],
         scores: [],
         settings: null,
+        questions: null, // 🔹 Adăugat: întrebările vor fi salvate aici
       };
     }
 
@@ -50,8 +51,12 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('player_joined', room.players);
 
-    if (room.players.length === 2 && room.settings) {
-      io.to(roomId).emit('start_quiz', room.settings);
+    if (room.players.length === 2 && room.settings && room.questions) {
+      io.to(roomId).emit('start_quiz', {
+        subject: room.settings.subject,
+        difficulty: room.settings.difficulty,
+        questions: room.questions,
+      });
     }
   });
 
@@ -60,8 +65,28 @@ io.on('connection', (socket) => {
       rooms[roomId].settings = { subject, difficulty };
       console.log(`📚 Setări salvate în ${roomId}:`, subject, difficulty);
 
-      if (rooms[roomId].players.length === 2) {
-        io.to(roomId).emit('start_quiz', rooms[roomId].settings);
+      if (rooms[roomId].players.length === 2 && rooms[roomId].questions) {
+        io.to(roomId).emit('start_quiz', {
+          subject,
+          difficulty,
+          questions: rooms[roomId].questions,
+        });
+      }
+    }
+  });
+
+  // 🔹 Adăugat: serverul primește întrebările de la host
+  socket.on('set_questions', ({ roomId, questions }) => {
+    if (rooms[roomId]) {
+      rooms[roomId].questions = questions;
+      console.log(`📨 Întrebări setate pentru camera ${roomId}.`);
+
+      if (rooms[roomId].players.length === 2 && rooms[roomId].settings) {
+        io.to(roomId).emit('start_quiz', {
+          subject: rooms[roomId].settings.subject,
+          difficulty: rooms[roomId].settings.difficulty,
+          questions: rooms[roomId].questions,
+        });
       }
     }
   });
