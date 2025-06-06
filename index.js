@@ -30,11 +30,11 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) {
       rooms[roomId] = {
         players: [],
-        playerReady: {}, // Tracked if players are ready
+        readyCount: 0,
         scores: [],
         settings: null,
         questions: null,
-        seed: null,    // Added seed storage
+        gameStarted: false
       };
     }
 
@@ -42,7 +42,6 @@ io.on('connection', (socket) => {
 
     if (!room.players.includes(socket.id)) {
       room.players.push(socket.id);
-      room.playerReady[socket.id] = false; // Initialize as not ready
     }
 
     const isHost = room.players[0] === socket.id;
@@ -55,19 +54,6 @@ io.on('connection', (socket) => {
     }
 
     io.to(roomId).emit('player_joined', room.players);
-
-    // Start game only if both players ready, questions and seed are set
-    if (room.players.length === 2 && room.settings && room.questions && room.seed) {
-      const allReady = Object.values(room.playerReady).every(ready => ready === true);
-      if (allReady) {
-        io.to(roomId).emit('start_quiz', {
-          subject: room.settings.subject,
-          difficulty: room.settings.difficulty,
-          questions: room.questions,
-          seed: room.seed, // Send the seed
-        });
-      }
-    }
   });
 
   // 🔹 Răspuns la întrebarea "sunt eu host?"
@@ -85,29 +71,63 @@ io.on('connection', (socket) => {
     if (rooms[roomId]) {
       rooms[roomId].settings = { subject, difficulty };
       console.log(`📚 Setări salvate în ${roomId}:`, subject, difficulty);
-
-      checkAndStartQuiz(roomId);
     }
   });
 
-  // 🔹 Întrebările și seed-ul trimise de host
-  socket.on('set_questions', ({ roomId, questions, seed }) => {
-    if (rooms[roomId]) {
-      rooms[roomId].questions = questions;
-      rooms[roomId].seed = seed; // Store the seed
-      console.log(`📨 Întrebări setate pentru camera ${roomId} cu seed: ${seed}`);
-
-      checkAndStartQuiz(roomId);
-    }
-  });
-
-  // 🔹 Player ready event
-  socket.on('ready_to_start', ({ roomId }) => {
-    if (rooms[roomId]) {
-      rooms[roomId].playerReady[socket.id] = true;
-      console.log(`👍 Jucătorul ${socket.id} este gata în camera ${roomId}`);
+  // 🔹 Întrebările trimise de host - ACTUALIZAT
+  socket.on('set_questions', ({ roomId, questions }) => {
+    if (!rooms[roomId]) return;
+    
+    console.log(`📨 ${socket.id} setează ${questions.length} întrebări pentru camera ${roomId}`);
+    
+    // Stocăm întrebările în cameră
+    rooms[roomId].questions = questions;
+    
+    // Verificăm dacă avem ambii jucători și dacă setările sunt configurate
+    if (rooms[roomId].players.length === 2 && rooms[roomId].settings) {
+      // Trimitem aceleași întrebări la ambii jucători
+      const { subject, difficulty } = rooms[roomId].settings;
       
-      checkAndStartQuiz(roomId);
+      console.log(`🎮 Start quiz în camera ${roomId} cu ${questions.length} întrebări`);
+      console.log(`🔍 Prima întrebare: "${questions[0].question}"`);
+      
+      // Marcăm camera ca fiind începută pentru a preveni retrimiterile
+      rooms[roomId].gameStarted = true;
+      
+      // Emitem către toți jucătorii din cameră
+      io.to(roomId).emit('start_quiz', {
+        subject,
+        difficulty,
+        questions: questions, // EXACT aceleași întrebări
+      });
+    }
+  });
+
+  socket.on('ready_to_start', ({ roomId }) => {
+    if (!rooms[roomId]) return;
+    
+    rooms[roomId].readyCount++;
+    console.log(`👍 Un jucător este gata în ${roomId}. Total gata: ${rooms[roomId].readyCount}`);
+    
+    // Dacă avem ambii jucători gata și întrebările sunt setate
+    if (rooms[roomId].readyCount === 2 && 
+        rooms[roomId].questions && 
+        rooms[roomId].settings && 
+        !rooms[roomId].gameStarted) {
+      
+      const { subject, difficulty, questions } = rooms[roomId];
+      
+      console.log(`🎮 Ambii jucători sunt gata în ${roomId}. Începe jocul!`);
+      
+      // Marcăm camera ca fiind începută
+      rooms[roomId].gameStarted = true;
+      
+      // Emitem către toți jucătorii din cameră
+      io.to(roomId).emit('start_quiz', {
+        subject,
+        difficulty,
+        questions: questions, // EXACT aceleași întrebări
+      });
     }
   });
 
@@ -138,36 +158,6 @@ io.on('connection', (socket) => {
       }
     }
   });
-
-  // Helper function to check if all conditions are met to start the quiz
-  function checkAndStartQuiz(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-
-    // Start only when all conditions are met
-    if (room.players.length === 2 && 
-        room.settings && 
-        room.questions && 
-        room.seed) {
-          
-      // Make sure both players are ready
-      const allReady = room.players.every(playerId => {
-        // Host (player who sets questions) is automatically ready
-        if (playerId === room.players[0]) return true;
-        return room.playerReady[playerId] === true;
-      });
-      
-      if (allReady) {
-        console.log(`🎮 Începere quiz în camera ${roomId}`);
-        io.to(roomId).emit('start_quiz', {
-          subject: room.settings.subject,
-          difficulty: room.settings.difficulty,
-          questions: room.questions,
-          seed: room.seed, // Send the seed to clients
-        });
-      }
-    }
-  }
 });
 
 const PORT = process.env.PORT || 3000;
