@@ -30,7 +30,6 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) {
       rooms[roomId] = {
         players: [],
-        readyCount: 0,
         scores: [],
         settings: null,
         questions: null,
@@ -76,12 +75,12 @@ io.on('connection', (socket) => {
 
   // 🔹 Întrebările trimise de host - ACTUALIZAT
   socket.on('set_questions', ({ roomId, questions }) => {
-    if (!rooms[roomId]) return;
+    if (!rooms[roomId] || rooms[roomId].gameStarted) return;
     
     console.log(`📨 ${socket.id} setează ${questions.length} întrebări pentru camera ${roomId}`);
     
     // Stocăm întrebările în cameră
-    rooms[roomId].questions = questions;
+    rooms[roomId].questions = JSON.parse(JSON.stringify(questions)); // Deep copy
     
     // Verificăm dacă avem ambii jucători și dacă setările sunt configurate
     if (rooms[roomId].players.length === 2 && rooms[roomId].settings) {
@@ -89,7 +88,9 @@ io.on('connection', (socket) => {
       const { subject, difficulty } = rooms[roomId].settings;
       
       console.log(`🎮 Start quiz în camera ${roomId} cu ${questions.length} întrebări`);
-      console.log(`🔍 Prima întrebare: "${questions[0].question}"`);
+      if (questions.length > 0) {
+        console.log(`🔍 Prima întrebare: "${questions[0].question}"`);
+      }
       
       // Marcăm camera ca fiind începută pentru a preveni retrimiterile
       rooms[roomId].gameStarted = true;
@@ -98,22 +99,21 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('start_quiz', {
         subject,
         difficulty,
-        questions: questions, // EXACT aceleași întrebări
+        questions: rooms[roomId].questions,
+        isMultiplayer: true  // Asigurăm că isMultiplayer este setat
       });
     }
   });
 
   socket.on('ready_to_start', ({ roomId }) => {
-    if (!rooms[roomId]) return;
+    if (!rooms[roomId] || !rooms[roomId].questions || rooms[roomId].gameStarted) return;
     
-    rooms[roomId].readyCount++;
-    console.log(`👍 Un jucător este gata în ${roomId}. Total gata: ${rooms[roomId].readyCount}`);
+    console.log(`👍 ${socket.id} este gata în ${roomId}`);
     
-    // Dacă avem ambii jucători gata și întrebările sunt setate
-    if (rooms[roomId].readyCount === 2 && 
+    // Dacă avem ambii jucători și întrebările sunt setate
+    if (rooms[roomId].players.length === 2 && 
         rooms[roomId].questions && 
-        rooms[roomId].settings && 
-        !rooms[roomId].gameStarted) {
+        rooms[roomId].settings) {
       
       const { subject, difficulty, questions } = rooms[roomId];
       
@@ -126,7 +126,8 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('start_quiz', {
         subject,
         difficulty,
-        questions: questions, // EXACT aceleași întrebări
+        questions: rooms[roomId].questions,
+        isMultiplayer: true  // Asigurăm că isMultiplayer este setat
       });
     }
   });
