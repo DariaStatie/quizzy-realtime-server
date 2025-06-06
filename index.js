@@ -30,9 +30,11 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) {
       rooms[roomId] = {
         players: [],
+        playerReady: {}, // Tracked if players are ready
         scores: [],
         settings: null,
         questions: null,
+        seed: null,    // Added seed storage
       };
     }
 
@@ -40,6 +42,7 @@ io.on('connection', (socket) => {
 
     if (!room.players.includes(socket.id)) {
       room.players.push(socket.id);
+      room.playerReady[socket.id] = false; // Initialize as not ready
     }
 
     const isHost = room.players[0] === socket.id;
@@ -53,12 +56,17 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('player_joined', room.players);
 
-    if (room.players.length === 2 && room.settings && room.questions) {
-      io.to(roomId).emit('start_quiz', {
-        subject: room.settings.subject,
-        difficulty: room.settings.difficulty,
-        questions: room.questions,
-      });
+    // Start game only if both players ready, questions and seed are set
+    if (room.players.length === 2 && room.settings && room.questions && room.seed) {
+      const allReady = Object.values(room.playerReady).every(ready => ready === true);
+      if (allReady) {
+        io.to(roomId).emit('start_quiz', {
+          subject: room.settings.subject,
+          difficulty: room.settings.difficulty,
+          questions: room.questions,
+          seed: room.seed, // Send the seed
+        });
+      }
     }
   });
 
@@ -78,29 +86,28 @@ io.on('connection', (socket) => {
       rooms[roomId].settings = { subject, difficulty };
       console.log(`📚 Setări salvate în ${roomId}:`, subject, difficulty);
 
-      if (rooms[roomId].players.length === 2 && rooms[roomId].questions) {
-        io.to(roomId).emit('start_quiz', {
-          subject,
-          difficulty,
-          questions: rooms[roomId].questions,
-        });
-      }
+      checkAndStartQuiz(roomId);
     }
   });
 
-  // 🔹 Întrebările trimise de host
-  socket.on('set_questions', ({ roomId, questions }) => {
+  // 🔹 Întrebările și seed-ul trimise de host
+  socket.on('set_questions', ({ roomId, questions, seed }) => {
     if (rooms[roomId]) {
       rooms[roomId].questions = questions;
-      console.log(`📨 Întrebări setate pentru camera ${roomId}.`);
+      rooms[roomId].seed = seed; // Store the seed
+      console.log(`📨 Întrebări setate pentru camera ${roomId} cu seed: ${seed}`);
 
-      if (rooms[roomId].players.length === 2 && rooms[roomId].settings) {
-        io.to(roomId).emit('start_quiz', {
-          subject: rooms[roomId].settings.subject,
-          difficulty: rooms[roomId].settings.difficulty,
-          questions: rooms[roomId].questions,
-        });
-      }
+      checkAndStartQuiz(roomId);
+    }
+  });
+
+  // 🔹 Player ready event
+  socket.on('ready_to_start', ({ roomId }) => {
+    if (rooms[roomId]) {
+      rooms[roomId].playerReady[socket.id] = true;
+      console.log(`👍 Jucătorul ${socket.id} este gata în camera ${roomId}`);
+      
+      checkAndStartQuiz(roomId);
     }
   });
 
@@ -131,6 +138,36 @@ io.on('connection', (socket) => {
       }
     }
   });
+
+  // Helper function to check if all conditions are met to start the quiz
+  function checkAndStartQuiz(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    // Start only when all conditions are met
+    if (room.players.length === 2 && 
+        room.settings && 
+        room.questions && 
+        room.seed) {
+          
+      // Make sure both players are ready
+      const allReady = room.players.every(playerId => {
+        // Host (player who sets questions) is automatically ready
+        if (playerId === room.players[0]) return true;
+        return room.playerReady[playerId] === true;
+      });
+      
+      if (allReady) {
+        console.log(`🎮 Începere quiz în camera ${roomId}`);
+        io.to(roomId).emit('start_quiz', {
+          subject: room.settings.subject,
+          difficulty: room.settings.difficulty,
+          questions: room.questions,
+          seed: room.seed, // Send the seed to clients
+        });
+      }
+    }
+  }
 });
 
 const PORT = process.env.PORT || 3000;
