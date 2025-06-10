@@ -1,3 +1,4 @@
+// ✅ index.js complet actualizat pentru server socket
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -39,12 +40,6 @@ io.on('connection', (socket) => {
 
     const room = rooms[roomId];
 
-    if (room.players.length >= 2) {
-      console.log(`❌ Cameră plină: ${roomId}`);
-      if (callback) callback({ error: 'Camera este deja plină.' });
-      return;
-    }
-
     if (!room.players.includes(socket.id)) {
       room.players.push(socket.id);
     }
@@ -54,7 +49,7 @@ io.on('connection', (socket) => {
       callback({
         isCreator: isHost,
         subject: room.settings?.subject || null,
-        difficulty: room.settings?.difficulty || null,
+        difficulty: room.settings?.difficulty || null
       });
     }
 
@@ -63,12 +58,8 @@ io.on('connection', (socket) => {
 
   socket.on('who_is_host', (roomId, callback) => {
     const room = rooms[roomId];
-    if (room && room.players.length > 0) {
-      const isHost = room.players[0] === socket.id;
-      if (callback) callback(isHost);
-    } else {
-      if (callback) callback(false);
-    }
+    const isHost = room && room.players[0] === socket.id;
+    if (callback) callback(!!isHost);
   });
 
   socket.on('set_quiz_settings', ({ roomId, subject, difficulty }) => {
@@ -80,30 +71,18 @@ io.on('connection', (socket) => {
 
   socket.on('set_questions', ({ roomId, questions }) => {
     if (!rooms[roomId]) return;
-
-    console.log(`📨 ${socket.id} setează ${questions.length} întrebări pentru camera ${roomId}`);
-
     const room = rooms[roomId];
     room.questions = JSON.parse(JSON.stringify(questions));
 
-    if (
-      room.players.length === 2 &&
-      room.settings &&
-      !room.gameStarted
-    ) {
+    if (room.players.length === 2 && room.settings && !room.gameStarted) {
       const { subject, difficulty } = room.settings;
       console.log(`🎮 Start quiz în camera ${roomId} cu ${questions.length} întrebări`);
-      if (questions.length > 0) {
-        console.log(`🔍 Prima întrebare: "${questions[0].question}"`);
-      }
-
       room.gameStarted = true;
-
       io.to(roomId).emit('start_quiz', {
         subject,
         difficulty,
         questions: room.questions,
-        isMultiplayer: true,
+        isMultiplayer: true
       });
     } else {
       console.log(`⏳ Încă așteptăm guest-ul sau setările în camera ${roomId}...`);
@@ -112,30 +91,18 @@ io.on('connection', (socket) => {
 
   socket.on('ready_to_start', ({ roomId }) => {
     const room = rooms[roomId];
-    console.log(`📥 ready_to_start primit de la ${socket.id} în camera ${roomId}`);
-    if (!room || !room.questions || !room.settings || room.gameStarted) {
-      console.log('❌ Nu putem porni quizul (lipsesc date sau e deja început)');
-      return;
-    }
+    if (!room || !room.questions || !room.settings || room.gameStarted) return;
 
-    if (
-      room.players.length === 2 &&
-      room.settings &&
-      room.questions
-    ) {
+    if (room.players.length === 2 && room.settings && room.questions) {
       const { subject, difficulty } = room.settings;
       console.log(`🎮 Ambii jucători sunt gata în ${roomId}. Începe jocul!`);
-
       room.gameStarted = true;
-
       io.to(roomId).emit('start_quiz', {
         subject,
         difficulty,
         questions: room.questions,
-        isMultiplayer: true,
+        isMultiplayer: true
       });
-    } else {
-      console.log(`⏳ Guest-ul e gata, dar lipsesc fie întrebările, fie host-ul...`);
     }
   });
 
@@ -144,12 +111,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('submit_score', ({ roomId, score }) => {
-    if (!rooms[roomId]) return;
+    const room = rooms[roomId];
+    if (!room) return;
 
-    rooms[roomId].scores.push(score);
-    if (rooms[roomId].scores.length === 2) {
-      const [player1, player2] = rooms[roomId].scores;
-      io.to(roomId).emit('receive_scores', { player1, player2 });
+    room.scores.push({ socketId: socket.id, score });
+    if (room.scores.length === 2) {
+      const [p1, p2] = room.scores;
+      io.to(roomId).emit('receive_scores', {
+        player1: p1.score,
+        player2: p2.score
+      });
       delete rooms[roomId];
     }
   });
@@ -160,11 +131,9 @@ io.on('connection', (socket) => {
       const room = rooms[roomId];
       if (room.players.includes(socket.id)) {
         room.players = room.players.filter(id => id !== socket.id);
-        io.to(roomId).emit('player_left');
-        if (room.players.length === 0) {
-          console.log(`🧹 Ștergem camera goală ${roomId}`);
-          delete rooms[roomId];
-        }
+        room.scores = room.scores.filter(s => s.socketId !== socket.id);
+        io.to(roomId).emit('player_left', room.players);
+        if (room.players.length === 0) delete rooms[roomId];
         break;
       }
     }
