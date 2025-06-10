@@ -105,12 +105,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ✅ MODIFICAT: Pornește quizul dacă întrebările erau deja setate
+  // ✅ LOG DETALIAT în ready_to_start
   socket.on('ready_to_start', ({ roomId }) => {
-    const room = rooms[roomId];
-    if (!room || !room.questions || !room.settings || room.gameStarted) return;
+    console.log(`📥 ready_to_start primit de la ${socket.id} în camera ${roomId}`);
 
-    console.log(`👍 ${socket.id} este gata în ${roomId}`);
+    const room = rooms[roomId];
+
+    if (!room || !room.questions || !room.settings || room.gameStarted) {
+      console.log(`❌ Nu putem porni quizul în ${roomId} (questions: ${!!room?.questions}, settings: ${!!room?.settings}, gameStarted: ${room?.gameStarted})`);
+      return;
+    }
 
     if (
       room.players.length === 2 &&
