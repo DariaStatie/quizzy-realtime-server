@@ -1,4 +1,3 @@
-// ✅ index.js complet actualizat pentru server socket
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -25,10 +24,10 @@ io.on('connection', (socket) => {
   console.log('🟢 Conectat:', socket.id);
 
   socket.on('join_room', (roomId, callback) => {
-    socket.join(roomId);
-    console.log(`📥 Socket ${socket.id} a intrat în camera ${roomId}`);
+    const room = rooms[roomId];
 
-    if (!rooms[roomId]) {
+    // Dacă nu există, inițializăm
+    if (!room) {
       rooms[roomId] = {
         players: [],
         scores: [],
@@ -38,22 +37,36 @@ io.on('connection', (socket) => {
       };
     }
 
-    const room = rooms[roomId];
+    // Verificăm din nou după inițializare
+    const updatedRoom = rooms[roomId];
 
-    if (!room.players.includes(socket.id)) {
-      room.players.push(socket.id);
+    // ❗ Dacă sunt deja 2 jucători, respinge conexiunea
+    if (updatedRoom.players.length >= 2) {
+      console.log(`❌ Camera ${roomId} este plină. Socket ${socket.id} a fost refuzat.`);
+      if (callback) callback({ error: 'room_full' });
+      socket.emit('room_full');
+      return;
     }
 
-    const isHost = room.players[0] === socket.id;
+    // Adaugă socket la cameră
+    socket.join(roomId);
+    console.log(`📥 Socket ${socket.id} a intrat în camera ${roomId}`);
+
+    // Adaugă în listă dacă nu există
+    if (!updatedRoom.players.includes(socket.id)) {
+      updatedRoom.players.push(socket.id);
+    }
+
+    const isHost = updatedRoom.players[0] === socket.id;
     if (callback) {
       callback({
         isCreator: isHost,
-        subject: room.settings?.subject || null,
-        difficulty: room.settings?.difficulty || null
+        subject: updatedRoom.settings?.subject || null,
+        difficulty: updatedRoom.settings?.difficulty || null
       });
     }
 
-    io.to(roomId).emit('player_joined', room.players);
+    io.to(roomId).emit('player_joined', updatedRoom.players);
   });
 
   socket.on('who_is_host', (roomId, callback) => {
@@ -70,8 +83,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('set_questions', ({ roomId, questions }) => {
-    if (!rooms[roomId]) return;
     const room = rooms[roomId];
+    if (!room) return;
     room.questions = JSON.parse(JSON.stringify(questions));
 
     if (room.players.length === 2 && room.settings && !room.gameStarted) {
@@ -85,7 +98,7 @@ io.on('connection', (socket) => {
         isMultiplayer: true
       });
     } else {
-      console.log(`⏳ Încă așteptăm guest-ul sau setările în camera ${roomId}...`);
+      console.log(`⏳ Așteptăm guest-ul sau setările în camera ${roomId}...`);
     }
   });
 
@@ -93,7 +106,7 @@ io.on('connection', (socket) => {
     const room = rooms[roomId];
     if (!room || !room.questions || !room.settings || room.gameStarted) return;
 
-    if (room.players.length === 2 && room.settings && room.questions) {
+    if (room.players.length === 2) {
       const { subject, difficulty } = room.settings;
       console.log(`🎮 Ambii jucători sunt gata în ${roomId}. Începe jocul!`);
       room.gameStarted = true;
@@ -115,12 +128,14 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     room.scores.push({ socketId: socket.id, score });
+
     if (room.scores.length === 2) {
       const [p1, p2] = room.scores;
       io.to(roomId).emit('receive_scores', {
         player1: p1.score,
         player2: p2.score
       });
+
       delete rooms[roomId];
     }
   });
