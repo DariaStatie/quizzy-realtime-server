@@ -13,8 +13,8 @@ app.get('/', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: '*',
+    methods: ['GET', 'POST']
   }
 });
 
@@ -38,6 +38,12 @@ io.on('connection', (socket) => {
     }
 
     const room = rooms[roomId];
+
+    if (room.players.length >= 2) {
+      console.log(`❌ Cameră plină: ${roomId}`);
+      if (callback) callback({ error: 'Camera este deja plină.' });
+      return;
+    }
 
     if (!room.players.includes(socket.id)) {
       room.players.push(socket.id);
@@ -72,14 +78,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ✅ MODIFICAT: Suport pentru guest întârziat
   socket.on('set_questions', ({ roomId, questions }) => {
     if (!rooms[roomId]) return;
 
     console.log(`📨 ${socket.id} setează ${questions.length} întrebări pentru camera ${roomId}`);
 
     const room = rooms[roomId];
-    room.questions = JSON.parse(JSON.stringify(questions)); // deep copy
+    room.questions = JSON.parse(JSON.stringify(questions));
 
     if (
       room.players.length === 2 &&
@@ -105,14 +110,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ✅ LOG DETALIAT în ready_to_start
   socket.on('ready_to_start', ({ roomId }) => {
-    console.log(`📥 ready_to_start primit de la ${socket.id} în camera ${roomId}`);
-
     const room = rooms[roomId];
-
+    console.log(`📥 ready_to_start primit de la ${socket.id} în camera ${roomId}`);
     if (!room || !room.questions || !room.settings || room.gameStarted) {
-      console.log(`❌ Nu putem porni quizul în ${roomId} (questions: ${!!room?.questions}, settings: ${!!room?.settings}, gameStarted: ${room?.gameStarted})`);
+      console.log('❌ Nu putem porni quizul (lipsesc date sau e deja început)');
       return;
     }
 
@@ -159,7 +161,10 @@ io.on('connection', (socket) => {
       if (room.players.includes(socket.id)) {
         room.players = room.players.filter(id => id !== socket.id);
         io.to(roomId).emit('player_left');
-        if (room.players.length === 0) delete rooms[roomId];
+        if (room.players.length === 0) {
+          console.log(`🧹 Ștergem camera goală ${roomId}`);
+          delete rooms[roomId];
+        }
         break;
       }
     }
